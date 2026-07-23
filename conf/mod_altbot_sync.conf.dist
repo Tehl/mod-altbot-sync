@@ -1,0 +1,12 @@
+[worldserver]
+
+########################################
+# mod-altbot-sync configuration
+########################################
+
+#
+#    AltbotSync.Debug
+#        Description: Enables debug logging for the module.
+#        Default:     0 (disabled)
+#                     Valid values: 0 (off) / 1 (on)
+AltbotSync.Debug = 0
