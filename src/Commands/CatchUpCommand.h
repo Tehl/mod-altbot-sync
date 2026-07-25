@@ -23,8 +23,6 @@ public:
 
 private:
     void SetBotLevel();
-    void CompletePlayerQuests();
-    void CompleteClassQuests();
 
     Player* player;
     Player* bot;

@@ -1,9 +1,9 @@
 #include "CatchUpCommand.h"
 
+#include "CatchUpQuestManager.h"
 #include "Log.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotMgr.h"
-#include "QuestDef.h"
 #include "RandomPlayerbotMgr.h"
 
 bool CatchUpCommandHandler::Handle(ChatHandler* const handler, Optional<std::string> param)
@@ -91,58 +91,25 @@ void CatchUpCommand::Execute()
     LOG_INFO("module", "[catchup] Catching up altbot {} to player {}", bot->GetName(), player->GetName());
 
     SetBotLevel();
-    CompletePlayerQuests();
-    CompleteClassQuests();
+
+    CatchUpQuestManager questManager(bot);
+    questManager.AddPlayerQuests(player);
+    questManager.AddClassQuests();
+    questManager.SatisfyPreQuests();
+    questManager.CompleteQuests();
 }
 
 void CatchUpCommand::SetBotLevel()
 {
     if (player->GetLevel() > bot->GetLevel())
     {
-        LOG_INFO("module", "[catchup] Bot needs levelup to {}", player->GetLevel());
+        LOG_INFO("module", "[catchup] Bot needs levelup from {} to {}", bot->GetLevel(), player->GetLevel());
+
+        bot->GiveLevel(player->GetLevel());
+        bot->SetUInt32Value(PLAYER_XP, 0);
     }
     else
     {
         LOG_INFO("module", "[catchup] Bot already at or above player level");
     }
 }
-
-void CatchUpCommand::CompletePlayerQuests()
-{
-    const RewardedQuestSet& playerQuests = player->getRewardedQuests();
-
-    for (RewardedQuestSet::const_iterator itr = playerQuests.begin(); itr != playerQuests.end(); ++itr)
-    {
-        uint32 const questId = *itr;
-        Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-
-        if (quest->IsRepeatable() || quest->IsDailyOrWeekly() || quest->IsSeasonal() || quest->IsDFQuest() ||
-            quest->IsPVPQuest())
-        {
-            LOG_INFO("module", "[catchup] Quest not required to catch up: {} {}", questId, quest->GetTitle());
-            continue;
-        }
-
-        if (!bot->SatisfyQuestClass(quest, false))
-        {
-            LOG_INFO("module", "[catchup] Bot not the right class for quest: {} {}", questId, quest->GetTitle());
-            continue;
-        }
-
-        if (!bot->SatisfyQuestRace(quest, false))
-        {
-            LOG_INFO("module", "[catchup] Bot not the right race for quest: {} {}", questId, quest->GetTitle());
-            continue;
-        }
-
-        if (bot->IsQuestRewarded(questId))
-        {
-            LOG_INFO("module", "[catchup] Bot already completed quest: {} {}", questId, quest->GetTitle());
-            continue;
-        }
-
-        LOG_INFO("module", "[catchup] Bot needs to complete quest: {} {}", questId, quest->GetTitle());
-    }
-}
-
-void CatchUpCommand::CompleteClassQuests() { LOG_INFO("module", "[catchup] TODO: Class Quests"); }
