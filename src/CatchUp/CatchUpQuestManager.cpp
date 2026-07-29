@@ -1,7 +1,10 @@
 #include "CatchUpQuestManager.h"
 
+#include "EquipAction.h"
+#include "ItemTemplate.h"
 #include "ObjectMgr.h"
 #include "QuestDef.h"
+#include "ReputationMgr.h"
 #include "SpellMgr.h"
 
 QuestIdSet CatchUpQuestManager::classQuestIds;
@@ -112,7 +115,7 @@ bool CatchUpQuestManager::SortQuestsByLevelAndChain(uint32 questIdA, uint32 ques
     return questIdA < questIdB;
 }
 
-CatchUpQuestManager::CatchUpQuestManager(Player* bot) : bot(bot) {}
+CatchUpQuestManager::CatchUpQuestManager(Player* bot, PlayerbotAI* botAI) : bot(bot), botAI(botAI) {}
 
 void CatchUpQuestManager::AddPlayerQuests(Player* player)
 {
@@ -198,19 +201,235 @@ CompleteQuestResult CatchUpQuestManager::CompleteQuests()
     for (uint32 questId : questsToComplete)
     {
         CompleteQuestResult res = CompleteQuest(questId);
-        if (res != COMPLETE_ERR_OK)
-        {
+        if (res != QUEST_ERR_OK)
             return res;
-        }
     }
 
-    return COMPLETE_ERR_OK;
+    return QUEST_ERR_OK;
 }
 
 CompleteQuestResult CatchUpQuestManager::CompleteQuest(uint32 questId)
 {
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-    LOG_INFO("module", "[catchup] Ready to complete quest {} {}", questId, quest->GetTitle());
+    LOG_INFO("module", "[catchup] Processing quest {} {}", questId, quest->GetTitle());
 
-    return COMPLETE_ERR_OK;
+    CompleteQuestResult inventoryResult = CheckInventorySpace(quest);
+    if (inventoryResult != QUEST_ERR_OK)
+        return inventoryResult;
+
+    CompleteQuestResult objectiveResult = FulfilQuestObjectives(quest);
+    if (objectiveResult != QUEST_ERR_OK)
+        return objectiveResult;
+
+    uint8 const currentLevel = bot->GetLevel();
+    uint32 const currentXP = bot->GetUInt32Value(PLAYER_XP);
+
+    bot->SetQuestStatus(questId, QUEST_STATUS_COMPLETE);
+
+    uint32 const reward = ChooseRewardItem(quest);
+    bot->RewardQuest(quest, reward, bot, false);
+
+    bot->GiveLevel(currentLevel);
+    bot->SetUInt32Value(PLAYER_XP, currentXP);
+
+    HandleRewards(quest, reward);
+
+    return QUEST_ERR_OK;
+}
+
+CompleteQuestResult CatchUpQuestManager::CheckInventorySpace(Quest const* quest)
+{
+    uint8 requiredInventorySpace = 0;
+    // need one inventory slot per reward item
+    for (uint32 i = 0; i < quest->GetRewItemsCount(); ++i)
+    {
+        if (quest->RewardItemId[i])
+            ++requiredInventorySpace;
+    }
+    // need one inventory slot total if there's a choice of reward item
+    for (uint32 i = 0; i < quest->GetRewChoiceItemsCount(); ++i)
+    {
+        if (quest->RewardChoiceItemId[i])
+        {
+            ++requiredInventorySpace;
+            break;
+        }
+    }
+    // also need an inventory slot for each item required to _QUEST_ the quest
+    for (uint8 i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+    {
+        if (quest->RequiredItemId[i] && quest->RequiredItemCount[i])
+            ++requiredInventorySpace;
+    }
+
+    if (bot->GetFreeInventorySpace() < requiredInventorySpace)
+    {
+        LOG_INFO("module", "[catchup] Bot needs at least {} free inventory slots to complete quest: {} {}",
+                 requiredInventorySpace, quest->GetQuestId(), quest->GetTitle());
+        return QUEST_ERR_INVENTORY_FULL;
+    }
+
+    return QUEST_ERR_OK;
+}
+
+CompleteQuestResult CatchUpQuestManager::FulfilQuestObjectives(Quest const* quest)
+{
+    // ref QuestAction::CompleteQuest
+
+    // Add quest items for quests that require items
+    for (uint8 x = 0; x < QUEST_ITEM_OBJECTIVES_COUNT; ++x)
+    {
+        uint32 id = quest->RequiredItemId[x];
+        uint32 count = quest->RequiredItemCount[x];
+        if (!id || !count)
+            continue;
+
+        ItemPosCountVec dest;
+        uint8 msg = bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, id, count);
+        if (msg == EQUIP_ERR_OK)
+        {
+            Item* item = bot->StoreNewItem(dest, id, true);
+            bot->SendNewItem(item, count, true, false);
+        }
+    }
+
+    // If the quest requires reputation to complete
+    if (uint32 repFaction = quest->GetRepObjectiveFaction())
+    {
+        uint32 repValue = quest->GetRepObjectiveValue();
+        uint32 curRep = bot->GetReputationMgr().GetReputation(repFaction);
+        if (curRep < repValue)
+            if (FactionEntry const* factionEntry = sFactionStore.LookupEntry(repFaction))
+                bot->GetReputationMgr().SetReputation(factionEntry, repValue);
+    }
+
+    // If the quest requires money
+    int32 ReqOrRewMoney = quest->GetRewOrReqMoney();
+    if (ReqOrRewMoney < 0)
+        bot->ModifyMoney(-ReqOrRewMoney);
+
+    return QUEST_ERR_OK;
+}
+
+uint32 CatchUpQuestManager::ChooseRewardItem(Quest const* quest) { return 0; }
+
+void CatchUpQuestManager::HandleRewards(Quest const* quest, uint32 reward)
+{
+    // check if the quest rewards items which need to be processed
+    bool hasRewardItems = false;
+    for (uint32 i = 0; i < quest->GetRewItemsCount(); ++i)
+    {
+        if (quest->RewardItemId[i])
+        {
+            hasRewardItems = true;
+            break;
+        }
+    }
+
+    for (uint32 i = 0; i < quest->GetRewChoiceItemsCount(); ++i)
+    {
+        if (quest->RewardChoiceItemId[i])
+        {
+            hasRewardItems = true;
+            break;
+        }
+    }
+
+    if (!hasRewardItems)
+    {
+        // no items granted, nothing to do
+        return;
+    }
+
+    // equip upgrades from inventory
+    uint32 equippedBefore[EQUIPMENT_SLOT_END - EQUIPMENT_SLOT_START] = {};
+    for (uint8 i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; ++i)
+    {
+        Item* equippedItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+        equippedBefore[i] = equippedItem ? equippedItem->GetEntry() : 0;
+    }
+
+    EquipUpgradeAction equipUpgrades(botAI);
+    ItemIds items = equipUpgrades.SelectInventoryItemsToEquip();
+    equipUpgrades.EquipItems(items);
+
+    uint32 equippedAfter[EQUIPMENT_SLOT_END - EQUIPMENT_SLOT_START] = {};
+    for (uint8 i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; ++i)
+    {
+        Item* equippedItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+        equippedAfter[i] = equippedItem ? equippedItem->GetEntry() : 0;
+    }
+
+    // identify unused items to be discarded
+    std::list<std::tuple<uint32, uint32>> itemsToDiscard;
+    for (uint32 i = 0; i < quest->GetRewItemsCount(); ++i)
+    {
+        if (uint32 itemId = quest->RewardItemId[i])
+            itemsToDiscard.push_back({itemId, quest->RewardItemIdCount[i]});
+    }
+    if (uint32 itemId = quest->RewardChoiceItemId[reward])
+        itemsToDiscard.push_back({itemId, 1});
+
+    for (uint8 i = EQUIPMENT_SLOT_START; i < EQUIPMENT_SLOT_END; ++i)
+    {
+        if (equippedBefore[i] == equippedAfter[i])
+            // slot hasn't changed
+            continue;
+
+        uint32 oldItem = equippedBefore[i];
+        uint32 newItem = equippedAfter[i];
+
+        if (oldItem != 0)
+        {
+            bool wasEquippedToDifferentSlot = false;
+            for (uint8 j = EQUIPMENT_SLOT_START; j < EQUIPMENT_SLOT_END; ++j)
+                if (equippedAfter[j] == oldItem)
+                {
+                    wasEquippedToDifferentSlot = true;
+                    break;
+                }
+
+            if (!wasEquippedToDifferentSlot)
+            {
+                // old item has been unequipped
+                LOG_INFO("module", "[catchup] Item {} {} was unequipped and will be discarded", oldItem,
+                         sObjectMgr->GetItemTemplate(oldItem)->Name1);
+                itemsToDiscard.push_back({oldItem, 1});
+            }
+        }
+
+        if (newItem != 0)
+        {
+            bool wasPreviousEquipment = false;
+            for (uint8 j = EQUIPMENT_SLOT_START; j < EQUIPMENT_SLOT_END; ++j)
+                if (equippedBefore[j] == newItem)
+                {
+                    wasPreviousEquipment = true;
+                    break;
+                }
+
+            if (!wasPreviousEquipment)
+            {
+                // new item wasn't previously equipped, so must come from quest
+                LOG_INFO("module", "[catchup] Item {} {} was equipped and will be retained", newItem,
+                         sObjectMgr->GetItemTemplate(newItem)->Name1);
+                itemsToDiscard.remove_if([newItem](std::tuple<uint32, uint32> x) { return std::get<0>(x) == newItem; });
+            }
+        }
+    }
+
+    // vendor discarded items
+    for (std::tuple<uint32, uint32> discardItem : itemsToDiscard)
+    {
+        uint32 itemId = std::get<0>(discardItem);
+        uint32 itemCount = std::get<1>(discardItem);
+        ItemTemplate const* item = sObjectMgr->GetItemTemplate(itemId);
+
+        int32 vendorPrice = int64(uint64(item->SellPrice) * uint64(itemCount));
+
+        LOG_INFO("module", "[catchup] Discarding {}x {} {} for {}c", itemCount, itemId, item->Name1, vendorPrice);
+
+        bot->ModifyMoney(vendorPrice);
+        bot->DestroyItemCount(itemId, itemCount, true);
+    }
 }

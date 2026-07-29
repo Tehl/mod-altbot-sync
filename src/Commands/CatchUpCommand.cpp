@@ -92,11 +92,16 @@ void CatchUpCommand::Execute()
 
     SetBotLevel();
 
-    CatchUpQuestManager questManager(bot);
+    CatchUpQuestManager questManager(bot, sPlayerbotsMgr.GetPlayerbotAI(bot));
     questManager.AddPlayerQuests(player);
     questManager.AddClassQuests();
     questManager.SatisfyPreQuests();
-    questManager.CompleteQuests();
+    CompleteQuestResult result = questManager.CompleteQuests();
+
+    if (result == QUEST_ERR_OK)
+        LOG_INFO("module", "[catchup] Quests completed successfully");
+    else
+        LOG_INFO("module", "[catchup] Failed to complete quests");
 }
 
 void CatchUpCommand::SetBotLevel()
