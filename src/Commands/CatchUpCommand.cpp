@@ -6,33 +6,57 @@
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
 
-bool CatchUpCommandHandler::Handle(ChatHandler* const handler, Optional<std::string> param)
+bool CatchUpCommandHandler::HandleDefaultCommand(ChatHandler* const handler, Optional<std::string> param)
+{
+    CatchUpCommand* catchUp = CommandFactory(handler);
+    if (!catchUp)
+        return true;
+
+    catchUp->SetBotLevel();
+    catchUp->CompleteQuests();
+
+    delete catchUp;
+
+    return true;
+}
+
+bool CatchUpCommandHandler::HandleLevelCommand(ChatHandler* const handler, Optional<std::string> param)
+{
+    CatchUpCommand* catchUp = CommandFactory(handler);
+    if (!catchUp)
+        return true;
+
+    catchUp->SetBotLevel();
+
+    delete catchUp;
+
+    return true;
+}
+
+CatchUpCommand* CatchUpCommandHandler::CommandFactory(ChatHandler* const handler)
 {
     Player* const player = handler->GetPlayer();
     if (!player)
     {
         handler->PSendSysMessage("[catchup] Command must be executed by a logged-in player");
-        return true;
+        return nullptr;
     }
 
     Player* const target = FindTarget(handler, player);
     if (!target)
     {
-        return true;
+        return nullptr;
     }
 
     Player* const bot = ValidateTarget(handler, player, target);
     if (!bot)
     {
-        return true;
+        return nullptr;
     }
 
     handler->PSendSysMessage("[catchup] Catching up altbot {} to player {}", bot->GetName(), player->GetName());
 
-    CatchUpCommand catchUp(player, bot);
-    catchUp.Execute();
-
-    return true;
+    return new CatchUpCommand(player, bot);
 }
 
 Player* CatchUpCommandHandler::FindTarget(ChatHandler* const handler, Player* const player)
@@ -86,24 +110,6 @@ Player* CatchUpCommandHandler::ValidateTarget(ChatHandler* const handler, Player
 
 CatchUpCommand::CatchUpCommand(Player* player, Player* bot) : player(player), bot(bot) {}
 
-void CatchUpCommand::Execute()
-{
-    LOG_INFO("module", "[catchup] Catching up altbot {} to player {}", bot->GetName(), player->GetName());
-
-    SetBotLevel();
-
-    CatchUpQuestManager questManager(bot, sPlayerbotsMgr.GetPlayerbotAI(bot));
-    questManager.AddPlayerQuests(player);
-    questManager.AddClassQuests();
-    questManager.SatisfyPreQuests();
-    CompleteQuestResult result = questManager.CompleteQuests();
-
-    if (result == QUEST_ERR_OK)
-        LOG_INFO("module", "[catchup] Quests completed successfully");
-    else
-        LOG_INFO("module", "[catchup] Failed to complete quests");
-}
-
 void CatchUpCommand::SetBotLevel()
 {
     if (player->GetLevel() > bot->GetLevel())
@@ -117,4 +123,18 @@ void CatchUpCommand::SetBotLevel()
     {
         LOG_INFO("module", "[catchup] Bot already at or above player level");
     }
+}
+
+void CatchUpCommand::CompleteQuests()
+{
+    CatchUpQuestManager questManager(bot, sPlayerbotsMgr.GetPlayerbotAI(bot));
+    questManager.AddPlayerQuests(player);
+    questManager.AddClassQuests();
+    questManager.SatisfyPreQuests();
+    CompleteQuestResult result = questManager.CompleteQuests();
+
+    if (result == QUEST_ERR_OK)
+        LOG_INFO("module", "[catchup] Quests completed successfully");
+    else
+        LOG_INFO("module", "[catchup] Failed to complete quests");
 }

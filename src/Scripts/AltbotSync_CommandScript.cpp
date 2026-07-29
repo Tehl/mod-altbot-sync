@@ -12,10 +12,16 @@ public:
 
     ChatCommandTable GetCommands() const override
     {
-        static ChatCommandTable dcTable = {
-            {"catchup", CatchUpCommandHandler::Handle, SEC_PLAYER, Console::No},
+        static ChatCommandTable catchupTable = {
+            {"level", CatchUpCommandHandler::HandleLevelCommand, SEC_PLAYER, Console::No},
+            {"", CatchUpCommandHandler::HandleDefaultCommand, SEC_PLAYER, Console::No},
         };
-        static ChatCommandTable root = {{"altsync", dcTable}};
+
+        static ChatCommandTable altsyncTable = {
+            {"catchup", catchupTable},
+        };
+
+        static ChatCommandTable root = {{"altsync", altsyncTable}};
         return root;
     }
 };

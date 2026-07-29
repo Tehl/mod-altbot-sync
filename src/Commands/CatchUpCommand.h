@@ -4,12 +4,16 @@
 #include "Chat.h"
 #include "Player.h"
 
+class CatchUpCommand;
+
 class CatchUpCommandHandler
 {
 public:
-    static bool Handle(ChatHandler* handler, Optional<std::string> param);
+    static bool HandleDefaultCommand(ChatHandler* handler, Optional<std::string> param);
+    static bool HandleLevelCommand(ChatHandler* handler, Optional<std::string> param);
 
 private:
+    static CatchUpCommand* CommandFactory(ChatHandler* handler);
     static Player* FindTarget(ChatHandler* handler, Player* player);
     static Player* ValidateTarget(ChatHandler* handler, Player* player, Player* target);
 };
@@ -19,11 +23,10 @@ class CatchUpCommand
 public:
     CatchUpCommand(Player* player, Player* bot);
 
-    void Execute();
+    void SetBotLevel();
+    void CompleteQuests();
 
 private:
-    void SetBotLevel();
-
     Player* player;
     Player* bot;
 };
