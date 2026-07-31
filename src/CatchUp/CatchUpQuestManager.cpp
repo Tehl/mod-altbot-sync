@@ -3,9 +3,11 @@
 #include "EquipAction.h"
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
+#include "Playerbots.h"
 #include "QuestDef.h"
 #include "ReputationMgr.h"
 #include "SpellMgr.h"
+#include "StatsWeightCalculator.h"
 
 QuestIdSet CatchUpQuestManager::classQuestIds;
 
@@ -115,7 +117,7 @@ bool CatchUpQuestManager::SortQuestsByLevelAndChain(uint32 questIdA, uint32 ques
     return questIdA < questIdB;
 }
 
-CatchUpQuestManager::CatchUpQuestManager(Player* bot, PlayerbotAI* botAI) : bot(bot), botAI(botAI) {}
+CatchUpQuestManager::CatchUpQuestManager(PlayerbotAI* botAI) : AiObject(botAI) {}
 
 void CatchUpQuestManager::AddPlayerQuests(Player* player)
 {
@@ -311,7 +313,89 @@ CompleteQuestResult CatchUpQuestManager::FulfilQuestObjectives(Quest const* ques
     return QUEST_ERR_OK;
 }
 
-uint32 CatchUpQuestManager::ChooseRewardItem(Quest const* quest) { return 0; }
+uint32 CatchUpQuestManager::ChooseRewardItem(Quest const* quest)
+{
+    // ref NewRpgBaseAction::BestRewardIndex
+    if (quest->GetRewChoiceItemsCount() <= 1)
+        return 0;
+
+    ItemUsage bestUsage = ITEM_USAGE_NONE;
+    for (uint8 i = 0; i < quest->GetRewChoiceItemsCount(); ++i)
+    {
+        ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", quest->RewardChoiceItemId[i]);
+        if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)
+            bestUsage = ITEM_USAGE_EQUIP;
+        else if (usage == ITEM_USAGE_BAD_EQUIP && bestUsage != ITEM_USAGE_EQUIP)
+            bestUsage = ITEM_USAGE_BAD_EQUIP;
+    }
+
+    switch (bestUsage)
+    {
+        case ITEM_USAGE_EQUIP:
+        case ITEM_USAGE_BAD_EQUIP:
+            return ChooseRewardItemToEquip(quest, bestUsage);
+
+        default:
+            return ChooseRewardItemToVendor(quest);
+    }
+}
+
+uint32 CatchUpQuestManager::ChooseRewardItemToEquip(Quest const* quest, ItemUsage bestUsage)
+{
+    LOG_INFO("module", "[catchup] Choosing best reward to equip for quest {} {}", quest->GetQuestId(),
+             quest->GetTitle());
+
+    StatsWeightCalculator calc(bot);
+    uint32 bestItemIdx = 0;
+    float bestScore = 0;
+    for (uint8 i = 0; i < quest->GetRewChoiceItemsCount(); ++i)
+    {
+        ItemUsage usage = AI_VALUE2(ItemUsage, "item usage", quest->RewardChoiceItemId[i]);
+        if (usage == bestUsage || usage == ITEM_USAGE_REPLACE)
+        {
+            float score = calc.CalculateItem(quest->RewardChoiceItemId[i]);
+            LOG_INFO("module", "[catchup] Item {} {} has item score {}", quest->RewardChoiceItemId[i],
+                     sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[i])->Name1, score);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestItemIdx = i;
+            }
+        }
+    }
+
+    LOG_INFO("module", "[catchup] Best reward to equip is {} {} with score {}", quest->RewardChoiceItemId[bestItemIdx],
+             sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[bestItemIdx])->Name1, bestScore);
+
+    return bestItemIdx;
+}
+
+uint32 CatchUpQuestManager::ChooseRewardItemToVendor(Quest const* quest)
+{
+    LOG_INFO("module", "[catchup] Choosing best reward to vendor for quest {} {}", quest->GetQuestId(),
+             quest->GetTitle());
+
+    uint32 bestItemIdx = 0;
+    float bestPrice = 0;
+    for (uint8 i = 0; i < quest->GetRewChoiceItemsCount(); ++i)
+    {
+        ItemTemplate const* item = sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[i]);
+        LOG_INFO("module", "[catchup] Item {} {} has sell price {}c", quest->RewardChoiceItemId[i], item->Name1,
+                 item->SellPrice);
+
+        if (item->SellPrice > bestPrice)
+        {
+            bestPrice = item->SellPrice;
+            bestItemIdx = i;
+        }
+    }
+
+    LOG_INFO("module", "[catchup] Best reward to vendor is {} {} with sell price {}c",
+             quest->RewardChoiceItemId[bestItemIdx],
+             sObjectMgr->GetItemTemplate(quest->RewardChoiceItemId[bestItemIdx])->Name1, bestPrice);
+
+    return bestItemIdx;
+}
 
 void CatchUpQuestManager::HandleRewards(Quest const* quest, uint32 reward)
 {

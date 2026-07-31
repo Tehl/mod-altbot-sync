@@ -127,7 +127,7 @@ void CatchUpCommand::SetBotLevel()
 
 void CatchUpCommand::CompleteQuests()
 {
-    CatchUpQuestManager questManager(bot, sPlayerbotsMgr.GetPlayerbotAI(bot));
+    CatchUpQuestManager questManager(sPlayerbotsMgr.GetPlayerbotAI(bot));
     questManager.AddPlayerQuests(player);
     questManager.AddClassQuests();
     questManager.SatisfyPreQuests();

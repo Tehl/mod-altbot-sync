@@ -1,6 +1,8 @@
 #ifndef ALTBOT_SYNC_CATCHUPQUESTMANAGER_H
 #define ALTBOT_SYNC_CATCHUPQUESTMANAGER_H
 
+#include "AiObject.h"
+#include "ItemUsageValue.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 
@@ -12,12 +14,12 @@ enum CompleteQuestResult : uint8
     QUEST_ERR_INVENTORY_FULL = 1,
 };
 
-class CatchUpQuestManager
+class CatchUpQuestManager : AiObject
 {
 public:
     static void Init();
 
-    CatchUpQuestManager(Player* bot, PlayerbotAI* botAI);
+    CatchUpQuestManager(PlayerbotAI* botAI);
 
     void AddPlayerQuests(Player* player);
     void AddClassQuests();
@@ -34,10 +36,10 @@ private:
     CompleteQuestResult CheckInventorySpace(Quest const* quest);
     CompleteQuestResult FulfilQuestObjectives(Quest const* quest);
     uint32 ChooseRewardItem(Quest const* quest);
+    uint32 ChooseRewardItemToEquip(Quest const* quest, ItemUsage bestUsage);
+    uint32 ChooseRewardItemToVendor(Quest const* quest);
     void HandleRewards(Quest const* quest, uint32 reward);
 
-    Player* bot;
-    PlayerbotAI* botAI;
     QuestIdSet requiredQuestIds;
 };
 
