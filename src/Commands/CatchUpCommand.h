@@ -23,8 +23,10 @@ class CatchUpCommand
 public:
     CatchUpCommand(Player* player, Player* bot);
 
-    void SetBotLevel();
+    void GiveLevel();
     void CompleteQuests();
+
+    bool ShouldCompleteQuests();
 
 private:
     Player* player;

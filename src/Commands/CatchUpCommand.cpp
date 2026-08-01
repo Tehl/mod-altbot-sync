@@ -1,5 +1,6 @@
 #include "CatchUpCommand.h"
 
+#include "CatchUpCharacterManager.h"
 #include "CatchUpQuestManager.h"
 #include "Log.h"
 #include "PlayerbotAI.h"
@@ -12,8 +13,12 @@ bool CatchUpCommandHandler::HandleDefaultCommand(ChatHandler* const handler, Opt
     if (!catchUp)
         return true;
 
-    catchUp->SetBotLevel();
-    catchUp->CompleteQuests();
+    catchUp->GiveLevel();
+
+    if (catchUp->ShouldCompleteQuests())
+        catchUp->CompleteQuests();
+    else
+        handler->PSendSysMessage("[catchup] Bot should spend at least one talent point before completing quests");
 
     delete catchUp;
 
@@ -26,7 +31,7 @@ bool CatchUpCommandHandler::HandleLevelCommand(ChatHandler* const handler, Optio
     if (!catchUp)
         return true;
 
-    catchUp->SetBotLevel();
+    catchUp->GiveLevel();
 
     delete catchUp;
 
@@ -110,19 +115,19 @@ Player* CatchUpCommandHandler::ValidateTarget(ChatHandler* const handler, Player
 
 CatchUpCommand::CatchUpCommand(Player* player, Player* bot) : player(player), bot(bot) {}
 
-void CatchUpCommand::SetBotLevel()
+void CatchUpCommand::GiveLevel()
 {
+    CatchUpCharacterManager characterManager(bot);
+
     if (player->GetLevel() > bot->GetLevel())
     {
         LOG_INFO("module", "[catchup] Bot needs levelup from {} to {}", bot->GetLevel(), player->GetLevel());
-
-        bot->GiveLevel(player->GetLevel());
-        bot->SetUInt32Value(PLAYER_XP, 0);
+        characterManager.GiveLevel(player);
     }
     else
-    {
         LOG_INFO("module", "[catchup] Bot already at or above player level");
-    }
+
+    characterManager.GiveAbilities();
 }
 
 void CatchUpCommand::CompleteQuests()
@@ -137,4 +142,11 @@ void CatchUpCommand::CompleteQuests()
         LOG_INFO("module", "[catchup] Quests completed successfully");
     else
         LOG_INFO("module", "[catchup] Failed to complete quests");
+}
+
+bool CatchUpCommand::ShouldCompleteQuests()
+{
+    uint8 talents[3] = {0, 0, 0};
+    bot->GetTalentTreePoints(talents);
+    return talents[0] > 0 || talents[1] > 0 || talents[2] > 0;
 }
