@@ -10,8 +10,15 @@ public:
 
     void GiveLevel(Player* player);
     void GiveAbilities();
+    void GiveBags(Player* player);
 
 private:
+    static std::unordered_map<uint32, uint32> bags_vanilla;
+    static std::unordered_map<uint32, uint32> bags_tbc;
+    static std::unordered_map<uint32, uint32> bags_wotlk;
+
+    uint32 ChooseBagTypeBySize(uint32 size);
+
     Player* bot;
 };
 

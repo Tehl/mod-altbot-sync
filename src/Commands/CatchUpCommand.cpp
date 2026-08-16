@@ -128,6 +128,7 @@ void CatchUpCommand::GiveLevel()
         LOG_INFO("module", "[catchup] Bot already at or above player level");
 
     characterManager.GiveAbilities();
+    characterManager.GiveBags(player);
 }
 
 void CatchUpCommand::CompleteQuests()
