@@ -10,9 +10,11 @@ class CatchUpCommandHandler
 {
 public:
     static bool HandleDefaultCommand(ChatHandler* handler, Optional<std::string> param);
+    static bool HandleAllCommand(ChatHandler* handler, Optional<std::string> param);
 
 private:
-    static CatchUpCommand* CommandFactory(ChatHandler* handler);
+    static void RunCatchUp(ChatHandler* const handler, Player* player, Player* bot);
+
     static Player* FindTarget(ChatHandler* handler, Player* player);
     static Player* ValidateTarget(ChatHandler* handler, Player* player, Player* target);
 };

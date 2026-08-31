@@ -9,7 +9,7 @@
 - [x] Select best reward when options are available
 - [x] Grant spells/abilities when levelling up
 - [x] Update equipped bags to match player inventory size
-- [ ] Apply sync to all party members at the same time
+- [x] Apply sync to all party members at the same time
 - [ ] Options framework
 - [ ] Option to automatically sync on group join
 - [ ] Option to automatically sync level on levelup

@@ -2,6 +2,7 @@
 
 #include "CatchUpCharacterManager.h"
 #include "CatchUpQuestManager.h"
+#include "Group.h"
 #include "Log.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotMgr.h"
@@ -9,46 +10,72 @@
 
 bool CatchUpCommandHandler::HandleDefaultCommand(ChatHandler* const handler, Optional<std::string> param)
 {
-    CatchUpCommand* catchUp = CommandFactory(handler);
-    if (!catchUp)
+    Player* const player = handler->GetPlayer();
+    if (!player)
+    {
+        handler->PSendSysMessage("[catchup] Command must be executed by a logged-in player");
+        return true;
+    }
+
+    Player* const target = FindTarget(handler, player);
+    if (!target)
         return true;
 
-    catchUp->GiveLevel();
+    Player* const bot = ValidateTarget(handler, player, target);
+    if (!bot)
+        return true;
 
-    if (catchUp->ShouldCompleteQuests())
-        catchUp->CompleteQuests();
-    else
-        handler->PSendSysMessage("[catchup] Bot should spend at least one talent point before completing quests");
-
-    delete catchUp;
+    RunCatchUp(handler, player, bot);
 
     return true;
 }
 
-CatchUpCommand* CatchUpCommandHandler::CommandFactory(ChatHandler* const handler)
+bool CatchUpCommandHandler::HandleAllCommand(ChatHandler* const handler, Optional<std::string> param)
 {
     Player* const player = handler->GetPlayer();
     if (!player)
     {
         handler->PSendSysMessage("[catchup] Command must be executed by a logged-in player");
-        return nullptr;
+        return true;
     }
 
-    Player* const target = FindTarget(handler, player);
-    if (!target)
+    Group* const group = player->GetGroup();
+    if (!group)
     {
-        return nullptr;
+        handler->PSendSysMessage("[catchup] You are not in a group");
+        return true;
     }
 
-    Player* const bot = ValidateTarget(handler, player, target);
-    if (!bot)
+    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
     {
-        return nullptr;
+        Player* groupMember = itr->GetSource();
+
+        if (groupMember == player)
+            continue;
+
+        Player* const bot = ValidateTarget(handler, player, groupMember);
+        if (!bot)
+            continue;
+
+        RunCatchUp(handler, player, bot);
     }
 
+    return true;
+}
+
+void CatchUpCommandHandler::RunCatchUp(ChatHandler* const handler, Player* player, Player* bot)
+{
     handler->PSendSysMessage("[catchup] Catching up altbot {} to player {}", bot->GetName(), player->GetName());
 
-    return new CatchUpCommand(player, bot);
+    CatchUpCommand catchUp(player, bot);
+
+    catchUp.GiveLevel();
+
+    if (catchUp.ShouldCompleteQuests())
+        catchUp.CompleteQuests();
+    else
+        handler->PSendSysMessage("[catchup] {} should spend at least one talent point before completing quests",
+                                 bot->GetName());
 }
 
 Player* CatchUpCommandHandler::FindTarget(ChatHandler* const handler, Player* const player)
@@ -56,14 +83,14 @@ Player* CatchUpCommandHandler::FindTarget(ChatHandler* const handler, Player* co
     ObjectGuid const selected = player->GetTarget();
     if (!selected)
     {
-        handler->PSendSysMessage("[catchup] No target selected");
+        handler->PSendSysMessage("[catchup] You don't have a target");
         return nullptr;
     }
 
     Player* const target = ObjectAccessor::FindConnectedPlayer(selected);
     if (!target)
     {
-        handler->PSendSysMessage("[catchup] Selected target is not a player character");
+        handler->PSendSysMessage("[catchup] Your target is not a player character");
         return nullptr;
     }
 
@@ -75,25 +102,25 @@ Player* CatchUpCommandHandler::ValidateTarget(ChatHandler* const handler, Player
     PlayerbotAI* const botAI = sPlayerbotsMgr.GetPlayerbotAI(target);
     if (!botAI)
     {
-        handler->PSendSysMessage("[catchup] Selected target is not a PlayerBot");
+        handler->PSendSysMessage("[catchup] {} is not a PlayerBot", target->GetName());
         return nullptr;
     }
 
     if (botAI->GetMaster() != player)
     {
-        handler->PSendSysMessage("[catchup] Selected target is not your PlayerBot");
+        handler->PSendSysMessage("[catchup] {} is not your PlayerBot", target->GetName());
         return nullptr;
     }
 
     if (sRandomPlayerbotMgr.IsRandomBot(target))
     {
-        handler->PSendSysMessage("[catchup] Selected target is a RandomBot");
+        handler->PSendSysMessage("[catchup] {} is a RandomBot", target->GetName());
         return nullptr;
     }
 
     if (sRandomPlayerbotMgr.IsAddclassBot(target))
     {
-        handler->PSendSysMessage("[catchup] Selected target is an AddclassBot");
+        handler->PSendSysMessage("[catchup] {} is an AddclassBot", target->GetName());
         return nullptr;
     }
 
