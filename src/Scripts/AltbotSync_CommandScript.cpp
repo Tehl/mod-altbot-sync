@@ -13,7 +13,6 @@ public:
     ChatCommandTable GetCommands() const override
     {
         static ChatCommandTable catchupTable = {
-            {"level", CatchUpCommandHandler::HandleLevelCommand, SEC_PLAYER, Console::No},
             {"", CatchUpCommandHandler::HandleDefaultCommand, SEC_PLAYER, Console::No},
         };
 

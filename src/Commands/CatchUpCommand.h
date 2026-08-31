@@ -10,7 +10,6 @@ class CatchUpCommandHandler
 {
 public:
     static bool HandleDefaultCommand(ChatHandler* handler, Optional<std::string> param);
-    static bool HandleLevelCommand(ChatHandler* handler, Optional<std::string> param);
 
 private:
     static CatchUpCommand* CommandFactory(ChatHandler* handler);

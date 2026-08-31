@@ -25,19 +25,6 @@ bool CatchUpCommandHandler::HandleDefaultCommand(ChatHandler* const handler, Opt
     return true;
 }
 
-bool CatchUpCommandHandler::HandleLevelCommand(ChatHandler* const handler, Optional<std::string> param)
-{
-    CatchUpCommand* catchUp = CommandFactory(handler);
-    if (!catchUp)
-        return true;
-
-    catchUp->GiveLevel();
-
-    delete catchUp;
-
-    return true;
-}
-
 CatchUpCommand* CatchUpCommandHandler::CommandFactory(ChatHandler* const handler)
 {
     Player* const player = handler->GetPlayer();
