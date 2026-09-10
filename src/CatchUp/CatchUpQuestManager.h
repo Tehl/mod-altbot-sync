@@ -1,10 +1,14 @@
 #ifndef ALTBOT_SYNC_CATCHUPQUESTMANAGER_H
 #define ALTBOT_SYNC_CATCHUPQUESTMANAGER_H
 
+#include <unordered_set>
+
 #include "AiObject.h"
+#include "Define.h"
 #include "ItemUsageValue.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "QuestDef.h"
 
 typedef std::unordered_set<uint32> QuestIdSet;
 
@@ -27,6 +31,8 @@ public:
     CompleteQuestResult CompleteQuests();
 
 private:
+    friend class CatchUpQuestManagerDebug;
+
     static void SatisfyPreQuests(QuestIdSet& questSet);
     static bool SortQuestsByLevelAndChain(uint32 questIdA, uint32 questIdB);
 

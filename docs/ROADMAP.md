@@ -10,12 +10,12 @@
 - [x] Grant spells/abilities when levelling up
 - [x] Update equipped bags to match player inventory size
 - [x] Apply sync to all party members at the same time
-- [ ] Options framework
+- [x] Options framework
 - [ ] Option to automatically sync on group join
 - [ ] Option to automatically sync level on levelup
 - [ ] Option to automatically sync quest completion
-- [ ] Ignore list for quest completion
-- [ ] Delay list for quest completion?
+- [x] Ignore list for quest completion
+- [x] Delay list for quest completion
 - [ ] Grant mount skill to match player
 - [ ] Handle warlock/paladin class mounts
 - [ ] Grant profession levels during sync
@@ -23,6 +23,8 @@
 - [ ] Feedback messages to player
 - [ ] Configurable logging
 - [ ] Clean up bot quest log?
+- [ ] Don't vendor high quality items
+- [ ] Specified reward choices for certain quests
 
 # Dungeon run ideas
 - Allocate altbots to fixed dungeon groups

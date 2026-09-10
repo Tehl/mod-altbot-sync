@@ -1,6 +1,9 @@
 #ifndef ALTBOT_SYNC_CATCHUPCHARACTERMANAGER_H
 #define ALTBOT_SYNC_CATCHUPCHARACTERMANAGER_H
 
+#include <unordered_map>
+
+#include "Define.h"
 #include "Player.h"
 
 class CatchUpCharacterManager

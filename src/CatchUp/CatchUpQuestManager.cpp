@@ -1,5 +1,6 @@
 #include "CatchUpQuestManager.h"
 
+#include "AltbotSyncConfig.h"
 #include "EquipAction.h"
 #include "ItemTemplate.h"
 #include "ObjectMgr.h"
@@ -128,6 +129,12 @@ void CatchUpQuestManager::AddPlayerQuests(Player* player)
         uint32 const questId = *itr;
         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
 
+        if (sAltbotSyncConfig.playerQuestIgnoreList.contains(questId))
+        {
+            LOG_TRACE("module", "[catchup] Player quest marked as ignored: {} {}", questId, quest->GetTitle());
+            continue;
+        }
+
         if (quest->IsRepeatable() || quest->IsDailyOrWeekly() || quest->IsSeasonal() || quest->IsDFQuest() ||
             quest->IsPVPQuest() || quest->GetRequiredClasses())
         {
@@ -159,6 +166,12 @@ void CatchUpQuestManager::AddClassQuests()
         uint32 questId = *itr;
         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
 
+        if (sAltbotSyncConfig.classQuestIgnoreList.contains(questId))
+        {
+            LOG_TRACE("module", "[catchup] Class quest marked as ignored: {} {}", questId, quest->GetTitle());
+            continue;
+        }
+
         if (!bot->SatisfyQuestClass(quest, false))
         {
             LOG_TRACE("module", "[catchup] Bot not the right class for quest: {} {}", questId, quest->GetTitle());
@@ -171,7 +184,16 @@ void CatchUpQuestManager::AddClassQuests()
             continue;
         }
 
-        if (quest->GetMinLevel() > bot->GetLevel())
+        uint32 minLevel = quest->GetMinLevel();
+        if (auto delayLevel = sAltbotSyncConfig.classQuestDelayList.find(quest->GetQuestId());
+            delayLevel != sAltbotSyncConfig.classQuestDelayList.end())
+        {
+            LOG_INFO("module", "[catchup] Delaying level requirement for quest: {} {} until level {}", questId,
+                     quest->GetTitle(), delayLevel->second);
+            minLevel = delayLevel->second;
+        }
+
+        if (minLevel > bot->GetLevel())
         {
             LOG_TRACE("module", "[catchup] Bot not high enough level for quest: {} {}", questId, quest->GetTitle());
             continue;
